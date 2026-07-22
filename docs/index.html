@@ -1,1 +1,175 @@
-Hello World
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emoji Clipboard</title>
+<style>
+  /* Adjustable horizontal breathing room; tweak these two values freely */
+  :root {
+    --space-left: 2rem;
+    --space-right: 2rem;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    font-family: system-ui, sans-serif;
+    /* Independent left/right spacing driven by the root variables */
+    padding: 2rem var(--space-right) 2rem var(--space-left);
+  }
+  h1 {
+    color: #222;
+    margin-bottom: 1.5rem;
+    font-size: 1.4rem;
+    letter-spacing: 0.02em;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 12px;
+    max-width: 720px;
+    width: 100%;
+  }
+  /* Square, tappable tile that holds a single grapheme */
+  .cell {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.4rem;
+    background: #f2f4f8;
+    border: 1px solid #e2e6ee;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: transform 0.12s, background 0.12s, box-shadow 0.12s;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+  }
+  .cell:hover {
+    background: #e9edf6;
+    transform: scale(1.12);
+    box-shadow: 0 0 16px rgba(100, 140, 255, 0.25);
+  }
+  .cell:active { transform: scale(0.95); }
+  /* Transient per-cell confirmation badge */
+  .cell.copied::after {
+    content: 'Copied!';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100%);
+    background: #38b760;
+    color: #fff;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: fadeUp 0.8s ease forwards;
+  }
+  @keyframes fadeUp {
+    0%   { opacity: 1; transform: translateX(-50%) translateY(100%); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(160%); }
+  }
+  /* Global feedback banner anchored to the viewport */
+  #toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #38b760;
+    color: #fff;
+    padding: 0.6rem 1.4rem;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    opacity: 0;
+    transition: opacity 0.25s, transform 0.25s;
+    pointer-events: none;
+  }
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+  <h1>Click any emoji to copy</h1>
+  <div id="grid"></div>
+  <div id="toast"></div>
+
+<script>
+const EMOJIS = "👍🙏👏🌹❤️🇨🇳💪🤝👌✌️👆👇👎😄😭🤣😡😵‍💫😊🤭🫢🤦‍♂️🤔😳😱😍🙋‍♂️🎂🎉📣🛎️🔨⚡";
+
+// Segment on user-perceived character boundaries so multi-codepoint
+// emojis (flags, ZWJ sequences, skin tones) stay intact.
+const splitEmojis = (str) => {
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    const seg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+    return [...seg.segment(str)].map(s => s.segment);
+  }
+  return [...str];
+};
+
+const emojis = splitEmojis(EMOJIS);
+const grid = document.getElementById('grid');
+const toast = document.getElementById('toast');
+let toastTimer;
+
+// Build one interactive tile per emoji
+emojis.forEach(emoji => {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  cell.textContent = emoji;
+  cell.addEventListener('click', () => copyEmoji(emoji, cell));
+  grid.appendChild(cell);
+});
+
+// Surface the shared toast banner
+function showToast(message) {
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 1200);
+}
+
+// Copy to clipboard with a graceful fallback for legacy browsers
+function copyEmoji(emoji, cell) {
+  const onSuccess = () => {
+    // Restart the badge animation on repeat clicks
+    cell.classList.remove('copied');
+    void cell.offsetWidth;
+    cell.classList.add('copied');
+    setTimeout(() => cell.classList.remove('copied'), 800);
+    showToast(`Copied ${emoji}`);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(emoji).then(onSuccess).catch(() => legacyCopy(emoji, onSuccess));
+  } else {
+    legacyCopy(emoji, onSuccess);
+  }
+}
+
+// Hidden-textarea copy path for environments without the async Clipboard API
+function legacyCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  done();
+}
+</script>
+</body>
+</html>
