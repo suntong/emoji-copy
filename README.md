@@ -1,0 +1,2 @@
+# emoji-copy
+Emoji Copy
