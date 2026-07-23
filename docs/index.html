@@ -45,9 +45,22 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     padding: 2rem;
     overflow-y: auto;
+  }
+
+  /* Wrapper that vertically centers the grid when it fits the viewport
+     but collapses to top-alignment when content overflows. This prevents
+     the Chromium flexbox overflow-clipping bug where justify-content:center
+     makes early items unreachable by scroll. */
+  .content-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin-top: auto;
+    margin-bottom: auto;
   }
 
   h1 {
@@ -130,6 +143,24 @@
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+
+  /* Mobile: reclaim horizontal space by reducing default panel widths
+     and tightening grid/padding for 4+ columns. Panels remain draggable
+     but start slim. */
+  @media (max-width: 600px) {
+    .adjustable-space {
+      width: 8px;
+    }
+
+    #main-content {
+      padding: 0.5rem;
+    }
+
+    #grid {
+      grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+      gap: 6px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -139,8 +170,10 @@
     <div id="left-handle" class="drag-handle"></div>
 
     <div id="main-content">
-      <h1>Click any emoji to copy</h1>
-      <div id="grid"></div>
+      <div class="content-wrapper">
+        <h1>Click any emoji to copy</h1>
+        <div id="grid"></div>
+      </div>
     </div>
 
     <div id="right-handle" class="drag-handle"></div>
@@ -167,6 +200,9 @@ const grid = document.getElementById('grid');
 const toast = document.getElementById('toast');
 let toastTimer;
 
+// Width in px required for four emoji columns: 4 × 72px tracks + 3 × 12px gaps.
+const FOUR_COLUMN_FLOOR = 4 * 72 + 3 * 12;
+
 // Construct layout elements dynamically
 emojis.forEach(emoji => {
   const cell = document.createElement('div');
@@ -177,7 +213,7 @@ emojis.forEach(emoji => {
 });
 
 // Configure horizontal mouse/touch divider dragging mechanisms
-const initializeResizer = (handle, spaceTarget, isLeftSpace) => {
+const initializeResizer = (handle, spaceTarget, oppositeSpace, isLeftSpace) => {
   let activeDrag = false;
 
   const startDrag = (e) => {
@@ -191,9 +227,20 @@ const initializeResizer = (handle, spaceTarget, isLeftSpace) => {
     if (!activeDrag) return;
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const computedWidth = isLeftSpace ? clientX : window.innerWidth - clientX;
-    
-    // Smoothly constrain space limits between 0px and 40% of page width
-    const constrainedWidth = Math.min(Math.max(0, computedWidth), window.innerWidth * 0.4);
+
+    // Constrain so 4 grid columns + padding + handles + opposite panel
+    // remain within the viewport. This lets the user shrink the grid
+    // down to exactly 4 columns but not fewer.
+    const oppositeWidth = oppositeSpace.offsetWidth;
+    const mainContent = document.getElementById('main-content');
+    const paddingH = mainContent
+      ? parseFloat(getComputedStyle(mainContent).paddingLeft) +
+        parseFloat(getComputedStyle(mainContent).paddingRight)
+      : 64;
+    const reserved = FOUR_COLUMN_FLOOR + paddingH + 12;
+    const maxAllowedWidth = Math.max(0, window.innerWidth - reserved - oppositeWidth);
+
+    const constrainedWidth = Math.min(Math.max(0, computedWidth), maxAllowedWidth);
     spaceTarget.style.width = `${constrainedWidth}px`;
   };
 
@@ -215,8 +262,18 @@ const initializeResizer = (handle, spaceTarget, isLeftSpace) => {
   document.addEventListener('touchend', endDrag);
 };
 
-initializeResizer(document.getElementById('left-handle'), document.getElementById('left-space'), true);
-initializeResizer(document.getElementById('right-handle'), document.getElementById('right-space'), false);
+initializeResizer(
+  document.getElementById('left-handle'),
+  document.getElementById('left-space'),
+  document.getElementById('right-space'),
+  true
+);
+initializeResizer(
+  document.getElementById('right-handle'),
+  document.getElementById('right-space'),
+  document.getElementById('left-space'),
+  false
+);
 
 // Notify copy operation updates through viewport overlay alerts
 function showToast(message) {
